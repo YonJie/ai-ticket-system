@@ -149,6 +149,7 @@ vercel --prod # Production
 | 现象 | 处理 |
 |------|------|
 | `@vercel/docker` not published | 确认已拉取含新 `vercel.json`（Services）的提交后重新部署 |
+| `sh: java: not found` | 已改用 `eclipse-temurin:8-jre-jammy` + 绝对路径启动；请重新部署最新提交 |
 | Services / container 不可用 | 账号套餐需支持 [Vercel Services / Container](https://vercel.com/docs/services)；或将后端单独部署到 Railway/Fly 等，前端仍用 Vercel，并用 rewrite 代理 `/api` |
 | 后端启动失败 | 检查 `DATABASE_URL` 是否为 **JDBC** 形式（`jdbc:postgresql://...`），以及 `JWT_SECRET` 是否已配置 |
 
