@@ -11,6 +11,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 /**
  * JWT 鉴权拦截器：校验 Authorization Bearer token，并将 userId 写入 request 属性。
@@ -18,9 +19,10 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class JwtInterceptor implements HandlerInterceptor {
 
+    public static final String USER_ID_ATTR = "userId";
+
     private static final String AUTH_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String USER_ID_ATTR = "userId";
 
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
@@ -59,7 +61,7 @@ public class JwtInterceptor implements HandlerInterceptor {
         }
 
         try {
-            Long userId = jwtUtil.getUserIdFromToken(token);
+            UUID userId = jwtUtil.getUserIdFromToken(token);
             request.setAttribute(USER_ID_ATTR, userId);
             return true;
         } catch (Exception ex) {

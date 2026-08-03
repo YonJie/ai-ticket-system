@@ -2,6 +2,7 @@ package com.aiticket.exception;
 
 import com.aiticket.common.Result;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -21,15 +22,46 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     /**
-     * 处理业务异常。
+     * 处理业务异常；按业务码映射常见 HTTP 状态（如 409 Conflict）。
      *
      * @param ex 业务异常
      * @return 统一错误响应
      */
     @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.OK)
-    public Result<Void> handleBusinessException(BusinessException ex) {
-        return Result.error(ex.getMessage(), ex.getCode());
+    public ResponseEntity<Result<Void>> handleBusinessException(BusinessException ex) {
+        HttpStatus httpStatus = resolveHttpStatus(ex.getCode());
+        return ResponseEntity.status(httpStatus).body(Result.error(ex.getMessage(), ex.getCode()));
+    }
+
+    /**
+     * 将业务错误码映射为 HTTP 状态。
+     *
+     * @param code 业务错误码
+     * @return HTTP 状态
+     */
+    private HttpStatus resolveHttpStatus(Integer code) {
+        if (code == null) {
+            return HttpStatus.OK;
+        }
+        if (code == 400) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        if (code == 401) {
+            return HttpStatus.UNAUTHORIZED;
+        }
+        if (code == 403) {
+            return HttpStatus.FORBIDDEN;
+        }
+        if (code == 404) {
+            return HttpStatus.NOT_FOUND;
+        }
+        if (code == 409) {
+            return HttpStatus.CONFLICT;
+        }
+        if (code >= 500) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        return HttpStatus.OK;
     }
 
     /**

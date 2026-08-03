@@ -21,14 +21,18 @@ public class WebConfig implements WebMvcConfigurer {
     }
 
     /**
-     * 注册 JWT 拦截器，排除 /auth/**。
+     * 注册 JWT 拦截器；register/login 与健康检查放行，/api/auth/me 需鉴权。
      *
      * @param registry 拦截器注册表
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(jwtInterceptor)
-                .addPathPatterns("/**")
-                .excludePathPatterns("/auth/**");
+                .addPathPatterns("/api/**")
+                .excludePathPatterns(
+                        "/api/health",
+                        "/api/auth/register",
+                        "/api/auth/login"
+                );
     }
 }
