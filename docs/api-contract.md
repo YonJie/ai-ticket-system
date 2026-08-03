@@ -389,3 +389,13 @@
 ### GET /api/health
 
 无需鉴权。返回 `{ "status": "UP" }`（非统一 Result 包装）。
+
+---
+
+## 相关文档
+
+- 产品需求：[PRD.md](./PRD.md)
+- 技术设计：[design.md](./design.md)
+- 多 Agent 提示词实录：[PROMPTS.md](./PROMPTS.md)
+- 测试说明：[TESTING.md](./TESTING.md)
+- 文档索引：[README.md](./README.md)

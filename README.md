@@ -6,9 +6,10 @@ Vue3 + Vite 前端、Spring Boot 2.x 后端、Neon Postgres 数据库，部署�
 
 ```text
 ai-ticket-system/
-├── frontend/          # Vue3 + TypeScript + Vite
-├── backend/           # Spring Boot 2.7 + Java 8
-├── vercel.json        # Vercel Docker / 路由配置
+├── frontend/          # Vue3 + TypeScript + Vite（构建输出 dist）
+├── backend/           # Spring Boot 2.7 + Java 8（Dockerfile 多阶段构建）
+├── docs/              # PRD / 设计 / API 契约 / 测试 / AI 规则
+├── vercel.json        # Vercel 前后端构建与路由
 └── README.md
 ```
 
@@ -19,7 +20,7 @@ ai-ticket-system/
 | 前端 | Vue3、Vite、TypeScript、Vue Router、Pinia、Axios、Element Plus |
 | 后端 | Spring Boot 2.7、Java 8、Spring Web、Spring Data JPA、Spring Security、JJWT |
 | 数据库 | Neon Postgres（本地可用 `local` profile + H2 快速验证） |
-| 部署 | Vercel（前端静态 + 后端 Docker） |
+| 部署 | Vercel（前端 `@vercel/static-build` + 后端 `@vercel/docker`） |
 
 ## 本地开发
 
@@ -31,7 +32,14 @@ npm install
 npm run dev
 ```
 
-访问：http://localhost:5173
+访问：http://localhost:5173（`/api` 代理到 `http://localhost:8080`）
+
+生产构建（输出目录 `frontend/dist`）：
+
+```bash
+cd frontend
+npm run build
+```
 
 ### 后端
 
@@ -46,19 +54,101 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ```bash
 cd backend
-# 设置 SPRING_DATASOURCE_URL / USERNAME / PASSWORD 后：
+# 设置 DATABASE_URL（JDBC 形式）与 JWT_SECRET 后：
 mvn spring-boot:run
 ```
 
+打包：
+
+```bash
+cd backend
+mvn clean package
+```
+
+产物：`backend/target/ai-ticket-backend-0.0.1-SNAPSHOT.jar`
+
 健康检查：http://localhost:8080/api/health
 
-### 环境变量
+### 本地 Docker 测试（可选）
 
-复制 `.env.example` 为 `.env`，按 JDBC 形式配置 Neon 连接。
+需已安装 Docker，且已能访问 Neon（或在容器中注入等价环境变量）：
 
-## 部署说明
+```bash
+cd backend
+mvn clean package -DskipTests
+docker build -t ai-ticket-backend .
+docker run --rm -p 8080:8080 \
+  -e DATABASE_URL="jdbc:postgresql://HOST/neondb?sslmode=require" \
+  -e JWT_SECRET="your-secret" \
+  ai-ticket-backend
+```
 
-`vercel.json` 已配置：
+> 说明：当前 `Dockerfile` 为多阶段构建，镜像内会执行 Maven 打包；本地也可先 `mvn clean package` 再构建以加快迭代（此时仍建议保留多阶段 Dockerfile 以便 Vercel 云端构建）。
 
-- `/api/*` → 后端 Docker 服务
-- 其余请求 → 前端静态资源
+### 环境变量（本地）
+
+复制 `.env.example` 为 `.env`，至少配置：
+
+| 变量 | 说明 |
+|------|------|
+| `DATABASE_URL` | **JDBC** 连接串，如 `jdbc:postgresql://HOST/neondb?sslmode=require`（不要用 `postgresql://` 裸协议） |
+| `JWT_SECRET` | JWT 签名密钥，生产环境务必更换 |
+
+## 部署到 Vercel
+
+### 1. 导入项目
+
+1. 打开 [Vercel Dashboard](https://vercel.com/dashboard) → **Add New…** → **Project**
+2. 导入本 Git 仓库，**Root Directory** 保持仓库根目录（使用根目录 `vercel.json`）
+3. Framework Preset 可留空 / Other（由 `vercel.json` 的 `builds` 驱动）
+
+### 2. 配置环境变量（必填）
+
+在 **Project Settings → Environment Variables** 中添加（Production / Preview 均建议配置）：
+
+| 变量名 | 示例 / 说明 |
+|--------|-------------|
+| `DATABASE_URL` | `jdbc:postgresql://ep-xxxx.neon.tech/neondb?sslmode=require` |
+| `JWT_SECRET` | 足够长的随机字符串 |
+
+也可在 CLI 中添加（需已 `vercel link`）：
+
+```bash
+vercel env add DATABASE_URL
+vercel env add JWT_SECRET
+```
+
+### 3. 构建与路由（`vercel.json`）
+
+根目录 `vercel.json` 要点：
+
+- 前端：`@vercel/static-build`，构建 `frontend`，输出 `dist`
+- 后端：`@vercel/docker`，使用 `backend/Dockerfile`
+- `/api/*` → 后端容器
+- 带扩展名的静态资源 → `frontend/dist`
+- 其余前端路由 → `frontend/dist/index.html`（Vue Router history 模式）
+
+### 4. 部署
+
+```bash
+# 在仓库根目录
+vercel        # Preview
+vercel --prod # Production
+```
+
+或推送到已连接的 Git 分支，由 Vercel 自动部署。
+
+### 5. 部署后验证
+
+- 前端：`https://<your-project>.vercel.app/`
+- 健康检查：`https://<your-project>.vercel.app/api/health`
+- 演示账号（若 `DataInitializer` 已写入）：`customer` / `agent` / `admin`，密码 `123456`
+
+## 相关文档
+
+- 文档索引：[`docs/README.md`](docs/README.md)
+- 产品需求：[`docs/PRD.md`](docs/PRD.md)
+- 技术设计：[`docs/design.md`](docs/design.md)
+- API 契约：[`docs/api-contract.md`](docs/api-contract.md)
+- 测试说明：[`docs/TESTING.md`](docs/TESTING.md)
+- 多 Agent 提示词实录：[`docs/PROMPTS.md`](docs/PROMPTS.md)

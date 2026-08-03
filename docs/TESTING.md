@@ -57,3 +57,11 @@ npm test
 5. **H2 与 Neon Postgres 差异**：`contextLoads` 与测试配置使用 H2（`MODE=PostgreSQL`），生产方言/约束行为可能不同。
 6. **演示数据初始化**：全量 `@SpringBootTest` 会跑 `DataInitializer` 写入演示用户，勿假设测试库为空。
 7. **npm 镜像**：部分私有 registry 可能缺少 `@vue/test-utils` 等包；必要时使用 `https://registry.npmjs.org/` 安装。
+
+## 相关文档
+
+- 产品需求：[PRD.md](./PRD.md)
+- 技术设计：[design.md](./design.md)
+- API 契约：[api-contract.md](./api-contract.md)
+- 多 Agent 提示词实录：[PROMPTS.md](./PROMPTS.md)
+- 文档索引：[README.md](./README.md)
