@@ -1,9 +1,9 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 /**
- * Vite 配置：Vue 插件、路径别名与开发代理。
+ * Vite / Vitest 配置：Vue 插件、路径别名、开发代理与单元测试。
  */
 export default defineConfig({
   plugins: [vue()],
@@ -20,5 +20,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
   },
 })
