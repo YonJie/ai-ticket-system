@@ -1,4 +1,4 @@
-# Vercel Services 容器入口（与 Dockerfile 保持一致）
+# Vercel Services 容器入口（默认监听 80，与 Vercel Container Images 约定一致）
 # 构建阶段：Maven 打包
 FROM maven:3.9.9-eclipse-temurin-8 AS build
 WORKDIR /build
@@ -7,16 +7,18 @@ COPY src ./src
 RUN mvn -B -DskipTests package \
     && cp target/ai-ticket-backend-*.jar /build/app.jar
 
-# 运行阶段：使用 Ubuntu Jammy JRE（避免 alpine 镜像中 java 不在 PATH 的问题）
+# 运行阶段：Ubuntu Jammy JRE
 FROM eclipse-temurin:8-jre-jammy
 WORKDIR /app
 COPY --from=build /build/app.jar /app/app.jar
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
-ENV PORT=8080
+# Vercel Container 默认探测/转发 80；若项目设置了 PORT 则优先生效
+ENV PORT=80
 
-EXPOSE 8080
+EXPOSE 80
 
-# 使用绝对路径启动；Vercel / 容器平台会注入 PORT
-CMD ["bash", "-lc", "exec \"${JAVA_HOME}/bin/java\" -jar /app/app.jar --server.port=\"${PORT:-8080}\""]
+CMD ["/app/docker-entrypoint.sh"]

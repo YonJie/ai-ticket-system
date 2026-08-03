@@ -126,7 +126,7 @@ interceptor  →  JwtInterceptor：校验 Bearer，写入 request.userId
 |------|------|
 | `DATABASE_URL` | JDBC：`jdbc:postgresql://...` |
 | `JWT_SECRET` | JWT 签名密钥 |
-| `PORT` | 容器监听端口（平台注入） |
+| `PORT` | 容器监听端口；Vercel Container 默认 **80**（`Dockerfile.vercel`），本地 Docker 可用 8080 |
 
 详细步骤见仓库根 [README.md](../README.md)。
 
