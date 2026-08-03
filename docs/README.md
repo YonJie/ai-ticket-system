@@ -7,6 +7,7 @@
 | [PRD.md](./PRD.md) | 产品需求：角色、功能范围、业务规则与验收要点 |
 | [design.md](./design.md) | 技术设计：架构、数据模型、鉴权、部署与目录约定 |
 | [api-contract.md](./api-contract.md) | API 契约：请求/响应字段与错误码（前后端对齐唯一来源） |
+| [AI_PROMPTS.md](./AI_PROMPTS.md) | DeepSeek 调用参数、提示词与规则回退约定 |
 | [TESTING.md](./TESTING.md) | 测试说明：如何运行、覆盖场景与已知风险 |
 | [PROMPTS.md](./PROMPTS.md) | **多 Agent 协同开发提示词实录**（任务拆分、并行约束、整合方式） |
 

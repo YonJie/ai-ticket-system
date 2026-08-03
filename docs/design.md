@@ -23,6 +23,7 @@ Vercel 路由 (vercel.json)
 | 前端 | Vue3 + Vite + TS + Pinia + Vue Router + Element Plus + Axios | SPA；构建产物 `dist` |
 | 后端 | Spring Boot 2.7 / Java 8 / JPA / Validation / Security(PasswordEncoder) / JJWT | 无状态 JWT |
 | 数据库 | Neon Postgres | 环境变量 `DATABASE_URL`（JDBC 形式） |
+| AI | DeepSeek `deepseek-v4-flash`（关 thinking）+ 规则回退 | `DEEPSEEK_API_KEY` 可选；见 [AI_PROMPTS.md](./AI_PROMPTS.md) |
 | 部署 | Vercel Services：前端 Vite + 后端 container/Dockerfile | 见根目录 `vercel.json` |
 
 ## 3. 后端分层
@@ -71,10 +72,10 @@ interceptor  →  JwtInterceptor：校验 Bearer，写入 request.userId
 | id | UUID |
 | customer_id | FK → users |
 | title / description | 标题与描述 |
-| category | 自动分类结果 |
+| category | DeepSeek 或规则自动分类结果 |
 | status | `PENDING` / `PROCESSING` / `RESOLVED` / `CLOSED` |
 | assigned_to | FK → users，可空 |
-| ai_suggested_reply | 默认建议回复 |
+| ai_suggested_reply | AI / 回退建议回复 |
 | created_at / updated_at | 时间戳；更新用乐观锁（`updatedAt` + `@Version`） |
 
 ### messages
@@ -126,6 +127,8 @@ interceptor  →  JwtInterceptor：校验 Bearer，写入 request.userId
 |------|------|
 | `DATABASE_URL` | JDBC：`jdbc:postgresql://...` |
 | `JWT_SECRET` | JWT 签名密钥 |
+| `DEEPSEEK_API_KEY` | 可选；创建工单 AI 分类与建议回复 |
+| `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` / `DEEPSEEK_TIMEOUT_MS` | 可选，默认见 README |
 | `PORT` | 容器监听端口；Vercel Container 默认 **80**（`Dockerfile.vercel`），本地 Docker 可用 8080 |
 
 详细步骤见仓库根 [README.md](../README.md)。
@@ -139,6 +142,6 @@ interceptor  →  JwtInterceptor：校验 Bearer，写入 request.userId
 
 ## 8. 扩展方向
 
-- 将规则分类替换为真实 LLM / 向量检索
+- 多轮 AI 对话 / RAG 知识库
 - 附件、通知、审计日志
 - 将鉴权迁移到 Spring Security Filter，统一异常与 CORS

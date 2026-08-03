@@ -94,6 +94,10 @@ docker run --rm -p 8080:8080 \
 | `DATABASE_URL` | **JDBC** 无凭据 URL，如 `jdbc:postgresql://HOST/neondb?sslmode=require`；或 Neon 的 `postgresql://user:pass@HOST/...`（自动拆分）。勿用 `jdbc:postgresql://user:pass@...` |
 | `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | 当 `DATABASE_URL` 不含账号时必填 |
 | `JWT_SECRET` | JWT 签名密钥，生产环境务必更换 |
+| `DEEPSEEK_API_KEY` | 可选。配置后创建工单走 DeepSeek（`deepseek-v4-flash`，关闭 thinking）生成分类与建议回复；未配置则关键词 + 固定文案回退 |
+| `DEEPSEEK_BASE_URL` | 可选，默认 `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | 可选，默认 `deepseek-v4-flash` |
+| `DEEPSEEK_TIMEOUT_MS` | 可选，默认 `8000` |
 
 ## 部署到 Vercel
 
@@ -113,12 +117,14 @@ docker run --rm -p 8080:8080 \
 |--------|-------------|
 | `DATABASE_URL` | `jdbc:postgresql://ep-xxxx.neon.tech/neondb?sslmode=require` |
 | `JWT_SECRET` | 足够长的随机字符串 |
+| `DEEPSEEK_API_KEY` | 可选；生产若需真实 AI 分类/建议回复则必填 |
 
 也可在 CLI 中添加（需已 `vercel link`）：
 
 ```bash
 vercel env add DATABASE_URL
 vercel env add JWT_SECRET
+vercel env add DEEPSEEK_API_KEY
 ```
 
 ### 3. 构建与路由（`vercel.json`）

@@ -39,6 +39,10 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
      */
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+        if (shouldSkipDotEnv()) {
+            return;
+        }
+
         Map<String, Object> dotenvValues = new LinkedHashMap<String, Object>();
         for (Path candidate : candidateEnvFiles()) {
             if (candidate != null && Files.isRegularFile(candidate)) {
@@ -57,6 +61,19 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
         }
 
         applyJdbcNormalization(environment);
+    }
+
+    /**
+     * 测试运行时跳过 .env 注入，避免本地 Neon URL 覆盖 H2。
+     *
+     * @return true 表示跳过
+     */
+    private static boolean shouldSkipDotEnv() {
+        String flag = System.getProperty("ai.ticket.skip-dotenv");
+        if (!StringUtils.hasText(flag)) {
+            flag = System.getenv("AI_TICKET_SKIP_DOTENV");
+        }
+        return "true".equalsIgnoreCase(flag);
     }
 
     /**

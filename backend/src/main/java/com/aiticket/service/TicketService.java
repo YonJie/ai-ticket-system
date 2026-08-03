@@ -1,5 +1,6 @@
 package com.aiticket.service;
 
+import com.aiticket.dto.AiAssistResult;
 import com.aiticket.dto.FeedbackResponse;
 import com.aiticket.dto.MessageResponse;
 import com.aiticket.dto.PageResult;
@@ -36,28 +37,30 @@ import java.util.UUID;
 @Service
 public class TicketService {
 
-    private static final String DEFAULT_AI_REPLY = "感谢您的反馈，我们已收到工单，预计 24 小时内处理。";
-
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
     private final FeedbackRepository feedbackRepository;
+    private final AiAssistService aiAssistService;
 
     /**
      * @param ticketRepository   工单仓库
      * @param userRepository     用户仓库
      * @param messageRepository  留言仓库
      * @param feedbackRepository 评价仓库
+     * @param aiAssistService    AI 分类与建议回复
      */
     public TicketService(
             TicketRepository ticketRepository,
             UserRepository userRepository,
             MessageRepository messageRepository,
-            FeedbackRepository feedbackRepository) {
+            FeedbackRepository feedbackRepository,
+            AiAssistService aiAssistService) {
         this.ticketRepository = ticketRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
         this.feedbackRepository = feedbackRepository;
+        this.aiAssistService = aiAssistService;
     }
 
     /**
@@ -80,13 +83,15 @@ public class TicketService {
             throw new BusinessException("标题和描述不能为空", 400);
         }
 
+        AiAssistResult aiResult = aiAssistService.analyze(title, description);
+
         Ticket ticket = Ticket.builder()
                 .customer(currentUser)
                 .title(title)
                 .description(description)
-                .category(classify(title, description))
+                .category(aiResult.getCategory())
                 .status(TicketStatus.PENDING)
-                .aiSuggestedReply(DEFAULT_AI_REPLY)
+                .aiSuggestedReply(aiResult.getSuggestedReply())
                 .build();
 
         Ticket saved = ticketRepository.save(ticket);
@@ -192,27 +197,6 @@ public class TicketService {
         return toTicketResponse(saved);
     }
 
-    /**
-     * 根据标题与描述关键词自动分类。
-     *
-     * @param title       标题
-     * @param description 描述
-     * @return 分类名称
-     */
-    String classify(String title, String description) {
-        String text = (title == null ? "" : title) + (description == null ? "" : description);
-        if (containsAny(text, "退货", "退款")) {
-            return "退货";
-        }
-        if (containsAny(text, "物流", "快递")) {
-            return "物流";
-        }
-        if (containsAny(text, "账户", "登录")) {
-            return "账户";
-        }
-        return "其他";
-    }
-
     private void applyStaffUpdate(Ticket ticket, TicketUpdateRequest request) {
         boolean changed = false;
         if (request.getStatus() != null && !request.getStatus().trim().isEmpty()) {
@@ -300,15 +284,6 @@ public class TicketService {
         } catch (IllegalArgumentException ex) {
             throw new BusinessException("无效的工单状态: " + status, 400);
         }
-    }
-
-    private boolean containsAny(String text, String... keywords) {
-        for (String keyword : keywords) {
-            if (text.contains(keyword)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private TicketResponse toTicketResponse(Ticket ticket) {

@@ -132,14 +132,17 @@
 
 客户提交工单（需鉴权，**仅 CUSTOMER**）。
 
-服务端根据 `title` + `description` 关键词自动分类：
+服务端根据 `title` + `description` 生成 `category` 与 `aiSuggestedReply`：
 
-1. 含「退货」或「退款」→ `退货`
-2. 含「物流」或「快递」→ `物流`
-3. 含「账户」或「登录」→ `账户`
-4. 其他 → `其他`
+1. **优先 DeepSeek**（需配置 `DEEPSEEK_API_KEY`）：调用 `deepseek-v4-flash`（关闭 thinking），一次返回 JSON：`category`（仅允许 `退货` / `物流` / `账户` / `其他`）与 `suggestedReply`。
+2. **回退规则**（未配置 Key、调用失败、或模型返回非法 `category` / 空回复时）：
+   - 含「退货」或「退款」→ `退货`
+   - 含「物流」或「快递」→ `物流`
+   - 含「账户」或「登录」→ `账户`
+   - 其他 → `其他`
+   - 固定建议回复：`感谢您的反馈，我们已收到工单，预计 24 小时内处理。`
 
-并写入默认 `aiSuggestedReply`：`感谢您的反馈，我们已收到工单，预计 24 小时内处理。`；初始 `status` 为 `PENDING`。
+初始 `status` 为 `PENDING`。提示词细则见 [AI_PROMPTS.md](./AI_PROMPTS.md)。
 
 **请求体**
 

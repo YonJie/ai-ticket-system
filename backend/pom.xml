@@ -92,6 +92,16 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 避免本地 .env 的 Neon URL 覆盖测试 H2 -->
+                    <systemPropertyVariables>
+                        <ai.ticket.skip-dotenv>true</ai.ticket.skip-dotenv>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
