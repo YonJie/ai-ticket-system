@@ -1,0 +1,15 @@
+---
+description: AI 智能客服工单系统全局开发约定
+alwaysApply: true
+---
+
+# 项目约定
+
+1. 项目：AI 智能客服工单系统，Vue3 + Spring Boot 2.x + Neon Postgres。
+2. API 统一响应格式：`{ success: boolean, data: any, message?: string, code?: number }`。
+3. 数据库字段使用 snake_case，Java 实体使用 camelCase（通过 JPA `@Column` 映射），前端统一使用 camelCase。
+4. 所有需鉴权的接口统一使用 JWT 拦截器/过滤器校验。
+5. 数据库连接配置在 `application.properties` 中，从环境变量读取 `DATABASE_URL`。
+6. 前端 Axios 封装在 `frontend/src/utils/request.ts`，自动带 Authorization 头，统一错误提示（ElMessage）。
+7. 组件命名 PascalCase，页面放 `frontend/src/views`，通用组件放 `frontend/src/components`。
+8. 每次修改接口字段，同步更新 `docs/api-contract.md`。
