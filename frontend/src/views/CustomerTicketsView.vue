@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { isHandledApiError } from '@/types/api'
 import { useTicketStore } from '@/stores/ticket'
 import AppHeader from '@/components/AppHeader.vue'
 import { ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
@@ -14,7 +14,10 @@ onMounted(async () => {
   try {
     await ticketStore.fetchTickets()
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '加载失败')
+    if (!isHandledApiError(e)) {
+      // 本地校验类错误才提示
+      console.error(e)
+    }
   }
 })
 
@@ -40,6 +43,7 @@ function goDetail(row: Ticket) {
         v-loading="ticketStore.loading"
         :data="ticketStore.tickets"
         stripe
+        empty-text="暂无工单，点击右上角新建"
         style="width: 100%"
         @row-click="goDetail"
       >
@@ -52,9 +56,9 @@ function goDetail(row: Ticket) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
         <el-table-column label="操作" width="100">
-          <template #default="{ row }">
+          <template #default="{ row }: { row: Ticket }">
             <el-button link type="primary" @click.stop="goDetail(row)">查看</el-button>
           </template>
         </el-table-column>

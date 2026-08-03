@@ -12,7 +12,7 @@ const roleText = computed(() =>
 )
 
 /**
- * 退出并跳转登录页。
+ * 退出登录。
  */
 function handleLogout() {
   userStore.logout()

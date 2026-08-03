@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { isHandledApiError } from '@/types/api'
 import { useTicketStore } from '@/stores/ticket'
 import AppHeader from '@/components/AppHeader.vue'
 
@@ -32,7 +33,9 @@ async function handleSubmit() {
     ElMessage.success('工单已创建')
     void router.replace(`/tickets/${ticket.id}`)
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '创建失败')
+    if (!isHandledApiError(e)) {
+      ElMessage.error(e instanceof Error ? e.message : '创建失败')
+    }
   } finally {
     submitting.value = false
   }

@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { isHandledApiError } from '@/types/api'
 import type { UserRole } from '@/types/user'
 import { useUserStore } from '@/stores/user'
 import AppHeader from '@/components/AppHeader.vue'
@@ -18,7 +19,10 @@ const form = reactive({
 })
 
 const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 2, message: '用户名至少 2 个字符', trigger: 'blur' },
+  ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少 6 位', trigger: 'blur' },
@@ -27,7 +31,7 @@ const rules: FormRules = {
 }
 
 /**
- * 提交注册。
+ * 提交注册（成功后自动登录）。
  */
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
@@ -42,7 +46,9 @@ async function handleSubmit() {
       void router.replace('/tickets')
     }
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '注册失败')
+    if (!isHandledApiError(e)) {
+      ElMessage.error(e instanceof Error ? e.message : '注册失败')
+    }
   } finally {
     submitting.value = false
   }

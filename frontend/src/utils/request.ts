@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
-import type { ApiResult } from '@/types/api'
+import { ApiError, type ApiResult } from '@/types/api'
 import { clearStoredAuth, getStoredToken } from '@/utils/auth'
 
 /**
@@ -19,13 +19,42 @@ request.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config
 })
 
+/**
+ * 清理本地与 Pinia 登录态后跳转登录页。
+ *
+ * @param message 提示文案
+ */
+async function handleUnauthorized(message: string) {
+  clearStoredAuth()
+  try {
+    const { useUserStore } = await import('@/stores/user')
+    useUserStore().logout(false)
+  } catch {
+    // Pinia 未就绪时忽略
+  }
+  ElMessage.error(message || '登录已过期，请重新登录')
+  const { default: router } = await import('@/router')
+  if (router.currentRoute.value.path !== '/login') {
+    await router.push({
+      path: '/login',
+      query: { redirect: router.currentRoute.value.fullPath },
+    })
+  }
+}
+
 request.interceptors.response.use(
   (response) => {
     const body = response.data as ApiResult | undefined
+    // /health 等非统一包装响应直接放行
     if (body && typeof body === 'object' && 'success' in body && body.success === false) {
       const msg = body.message || '请求失败'
-      ElMessage.error(msg)
-      return Promise.reject(new Error(msg))
+      const code = body.code
+      if (code === 401 || response.status === 401) {
+        void handleUnauthorized(msg)
+      } else {
+        ElMessage.error(msg)
+      }
+      return Promise.reject(new ApiError(msg, code))
     }
     return response
   },
@@ -37,20 +66,12 @@ request.interceptors.response.use(
       '网络异常，请稍后重试'
 
     if (status === 401) {
-      clearStoredAuth()
-      ElMessage.error(msg || '登录已过期，请重新登录')
-      const { default: router } = await import('@/router')
-      if (router.currentRoute.value.path !== '/login') {
-        await router.push({
-          path: '/login',
-          query: { redirect: router.currentRoute.value.fullPath },
-        })
-      }
-      return Promise.reject(error)
+      await handleUnauthorized(msg)
+      return Promise.reject(new ApiError(msg, 401))
     }
 
     ElMessage.error(msg)
-    return Promise.reject(error)
+    return Promise.reject(new ApiError(msg, status))
   },
 )
 

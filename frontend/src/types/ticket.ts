@@ -4,25 +4,21 @@
 export type TicketStatus = 'PENDING' | 'PROCESSING' | 'RESOLVED' | 'CLOSED'
 
 /**
- * 留言发送方角色（便于展示）。
- */
-export type MessageSenderRole = 'CUSTOMER' | 'AGENT' | 'ADMIN'
-
-/**
- * 工单留言。
+ * 工单留言（对齐后端 MessageResponse）。
  */
 export interface TicketMessage {
   id: string
   ticketId: string
-  senderId: string
-  senderUsername: string
-  senderRole: MessageSenderRole
+  /** 发送者用户 ID */
+  userId: string
+  /** 发送者用户名 */
+  username: string
   content: string
   createdAt: string
 }
 
 /**
- * 工单评价。
+ * 工单评价（对齐后端 FeedbackResponse）。
  */
 export interface TicketFeedback {
   id: string
@@ -33,7 +29,7 @@ export interface TicketFeedback {
 }
 
 /**
- * 工单列表项 / 详情。
+ * 工单列表项 / 详情（对齐后端 TicketResponse / TicketDetailResponse）。
  */
 export interface Ticket {
   id: string
@@ -43,8 +39,8 @@ export interface Ticket {
   status: TicketStatus
   customerId: string
   customerUsername: string
-  assignedToId?: string | null
-  assignedToUsername?: string | null
+  /** 指派客服用户 ID */
+  assignedTo?: string | null
   aiSuggestedReply?: string | null
   messages?: TicketMessage[]
   feedback?: TicketFeedback | null
@@ -61,9 +57,11 @@ export interface CreateTicketPayload {
 }
 
 /**
- * 更新工单请求（客服改状态 / 客户追加留言兼容字段）。
+ * 更新工单请求（客服改状态 / 客户 extraMessage）。
  */
 export interface UpdateTicketPayload {
+  /** 乐观锁：客户端持有的 updatedAt，必填 */
+  updatedAt: string
   status?: TicketStatus
   assignedTo?: string
   extraMessage?: string

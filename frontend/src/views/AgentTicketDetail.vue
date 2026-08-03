@@ -2,14 +2,17 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { isHandledApiError } from '@/types/api'
 import type { TicketStatus } from '@/types/ticket'
 import { useTicketStore } from '@/stores/ticket'
+import { useUserStore } from '@/stores/user'
 import AppHeader from '@/components/AppHeader.vue'
-import { roleLabels, ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
+import { ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
 
 const route = useRoute()
 const router = useRouter()
 const ticketStore = useTicketStore()
+const userStore = useUserStore()
 
 const replyContent = ref('')
 const statusValue = ref<TicketStatus>('PENDING')
@@ -25,11 +28,22 @@ watch(
   { immediate: true },
 )
 
+/**
+ * 判断留言是否来自工单客户。
+ *
+ * @param userId 发送者 ID
+ */
+function isCustomerMessage(userId: string): boolean {
+  return Boolean(ticket.value && ticket.value.customerId === userId)
+}
+
 onMounted(async () => {
   try {
     await ticketStore.fetchTicketDetail(String(route.params.id))
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '加载失败')
+    if (!isHandledApiError(e)) {
+      ElMessage.error(e instanceof Error ? e.message : '加载失败')
+    }
     void router.replace('/agent')
   }
 })
@@ -39,16 +53,23 @@ onUnmounted(() => {
 })
 
 /**
- * 修改工单状态。
+ * 修改工单状态（需携带 updatedAt）。
  */
 async function handleStatusChange(status: TicketStatus) {
+  if (!ticket.value) return
   submitting.value = true
   try {
-    await ticketStore.updateTicket(String(route.params.id), { status })
+    await ticketStore.updateTicket(String(route.params.id), {
+      status,
+      updatedAt: ticket.value.updatedAt,
+      assignedTo: ticket.value.assignedTo || userStore.userInfo?.id,
+    })
     ElMessage.success('状态已更新')
   } catch (e) {
     if (ticket.value) statusValue.value = ticket.value.status
-    ElMessage.error(e instanceof Error ? e.message : '更新失败')
+    if (!isHandledApiError(e)) {
+      ElMessage.error(e instanceof Error ? e.message : '更新失败')
+    }
   } finally {
     submitting.value = false
   }
@@ -70,7 +91,9 @@ async function handleReply() {
     replyContent.value = ''
     ElMessage.success('回复已发送')
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '发送失败')
+    if (!isHandledApiError(e)) {
+      ElMessage.error(e instanceof Error ? e.message : '发送失败')
+    }
   } finally {
     submitting.value = false
   }
@@ -99,7 +122,7 @@ async function handleReply() {
             <el-descriptions-item label="分类">{{ ticket.category || '-' }}</el-descriptions-item>
             <el-descriptions-item label="客户">{{ ticket.customerUsername }}</el-descriptions-item>
             <el-descriptions-item label="处理人">
-              {{ ticket.assignedToUsername || '未指派' }}
+              {{ ticket.assignedTo ? '已指派' : '未指派' }}
             </el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ ticket.createdAt }}</el-descriptions-item>
           </el-descriptions>
@@ -143,8 +166,8 @@ async function handleReply() {
           <div v-if="ticket.messages?.length" class="messages">
             <div v-for="msg in ticket.messages" :key="msg.id" class="msg">
               <div class="msg-head">
-                <strong>{{ msg.senderUsername }}</strong>
-                <span class="role">{{ roleLabels[msg.senderRole] }}</span>
+                <strong>{{ msg.username }}</strong>
+                <span class="role">{{ isCustomerMessage(msg.userId) ? '客户' : '客服' }}</span>
                 <span class="time">{{ msg.createdAt }}</span>
               </div>
               <p>{{ msg.content }}</p>
@@ -164,6 +187,7 @@ async function handleReply() {
           </div>
         </el-card>
       </template>
+      <el-empty v-else-if="!ticketStore.loading" description="工单不存在或无权查看" />
     </main>
   </div>
 </template>

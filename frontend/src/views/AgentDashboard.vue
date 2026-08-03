@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { isHandledApiError } from '@/types/api'
 import type { Ticket, TicketStatus } from '@/types/ticket'
 import { useTicketStore } from '@/stores/ticket'
 import AppHeader from '@/components/AppHeader.vue'
@@ -18,7 +18,9 @@ async function loadList() {
   try {
     await ticketStore.fetchTickets(statusFilter.value)
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '加载失败')
+    if (!isHandledApiError(e)) {
+      console.error(e)
+    }
   }
 }
 
@@ -57,6 +59,7 @@ function goDetail(row: Ticket) {
         v-loading="ticketStore.loading"
         :data="ticketStore.tickets"
         stripe
+        empty-text="暂无工单"
         style="width: 100%"
         @row-click="goDetail"
       >
@@ -70,14 +73,14 @@ function goDetail(row: Ticket) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="assignedToUsername" label="处理人" width="120">
+        <el-table-column label="处理人" width="140">
           <template #default="{ row }: { row: Ticket }">
-            {{ row.assignedToUsername || '-' }}
+            {{ row.assignedTo ? '已指派' : '未指派' }}
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
         <el-table-column label="操作" width="100">
-          <template #default="{ row }">
+          <template #default="{ row }: { row: Ticket }">
             <el-button link type="primary" @click.stop="goDetail(row)">处理</el-button>
           </template>
         </el-table-column>

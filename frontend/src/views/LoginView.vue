@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { isHandledApiError } from '@/types/api'
 import { useUserStore } from '@/stores/user'
 import AppHeader from '@/components/AppHeader.vue'
 
@@ -49,7 +50,9 @@ async function handleSubmit() {
     ElMessage.success('登录成功')
     redirectByRole()
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '登录失败')
+    if (!isHandledApiError(e)) {
+      ElMessage.error(e instanceof Error ? e.message : '登录失败')
+    }
   } finally {
     submitting.value = false
   }

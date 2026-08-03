@@ -1,10 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { loginApi, registerApi } from '@/api/auth'
 import type { LoginPayload, RegisterPayload, UserInfo, UserRole } from '@/types/user'
 import { USER_KEY, getStoredToken, setStoredToken } from '@/utils/auth'
-
-/** 是否使用本地 mock（后端未就绪时保持 true） */
-const USE_MOCK = true
 
 /**
  * 从 localStorage 恢复用户信息。
@@ -18,36 +16,6 @@ function loadStoredUser(): UserInfo | null {
     return null
   }
 }
-
-/**
- * 演示用户（mock 登录/注册）。
- */
-const mockUsers: Array<UserInfo & { password: string }> = [
-  {
-    id: 'u-customer-1',
-    username: 'customer',
-    password: '123456',
-    role: 'CUSTOMER',
-    avatarUrl: null,
-    createdAt: '2026-08-01T09:00:00',
-  },
-  {
-    id: 'u-agent-1',
-    username: 'agent',
-    password: '123456',
-    role: 'AGENT',
-    avatarUrl: null,
-    createdAt: '2026-08-01T09:00:00',
-  },
-  {
-    id: 'u-admin-1',
-    username: 'admin',
-    password: '123456',
-    role: 'ADMIN',
-    avatarUrl: null,
-    createdAt: '2026-08-01T09:00:00',
-  },
-]
 
 /**
  * 用户状态：token、userInfo、role，以及登录/注册/退出。
@@ -75,49 +43,23 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
-   * 登录。mock 模式下校验本地演示账号；任意未注册用户名也可按 CUSTOMER 临时登录（密码任意非空）。
+   * 登录并写入本地会话。
    *
    * @param payload 用户名密码
    */
   async function login(payload: LoginPayload): Promise<UserInfo> {
     const username = payload.username.trim()
     const password = payload.password
-
     if (!username || !password) {
       throw new Error('请输入用户名和密码')
     }
-
-    if (USE_MOCK) {
-      await delay(200)
-      const found = mockUsers.find((u) => u.username === username)
-      if (found && found.password !== password) {
-        throw new Error('用户名或密码错误')
-      }
-      const user: UserInfo = found
-        ? {
-            id: found.id,
-            username: found.username,
-            role: found.role,
-            avatarUrl: found.avatarUrl,
-            createdAt: found.createdAt,
-          }
-        : {
-            id: `u-temp-${Date.now()}`,
-            username,
-            role: 'CUSTOMER',
-            avatarUrl: null,
-            createdAt: new Date().toISOString(),
-          }
-      persistSession(`mock-token-${user.id}`, user)
-      return user
-    }
-
-    // 后端就绪后切换：import request from '@/utils/request'
-    throw new Error('真实 API 尚未启用，请保持 USE_MOCK = true')
+    const result = await loginApi({ username, password })
+    persistSession(result.token, result.user)
+    return result.user
   }
 
   /**
-   * 注册。mock 模式下写入本地演示用户列表并自动登录。
+   * 注册成功后自动登录。
    *
    * @param payload 注册信息
    */
@@ -129,46 +71,29 @@ export const useUserStore = defineStore('user', () => {
     if (!username || !password) {
       throw new Error('请输入用户名和密码')
     }
+    if (username.length < 2) {
+      throw new Error('用户名至少 2 个字符')
+    }
     if (password.length < 6) {
       throw new Error('密码至少 6 位')
     }
 
-    if (USE_MOCK) {
-      await delay(200)
-      if (mockUsers.some((u) => u.username === username)) {
-        throw new Error('用户名已存在')
-      }
-      const user: UserInfo & { password: string } = {
-        id: `u-${Date.now()}`,
-        username,
-        password,
-        role: roleValue,
-        avatarUrl: null,
-        createdAt: new Date().toISOString(),
-      }
-      mockUsers.push(user)
-      const publicUser: UserInfo = {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        avatarUrl: user.avatarUrl,
-        createdAt: user.createdAt,
-      }
-      persistSession(`mock-token-${user.id}`, publicUser)
-      return publicUser
-    }
-
-    throw new Error('真实 API 尚未启用，请保持 USE_MOCK = true')
+    await registerApi({ username, password, role: roleValue })
+    return login({ username, password })
   }
 
   /**
    * 退出登录。
+   *
+   * @param clearStorage 是否清理 localStorage（默认 true）
    */
-  function logout() {
+  function logout(clearStorage = true) {
     token.value = null
     userInfo.value = null
-    setStoredToken(null)
-    localStorage.removeItem(USER_KEY)
+    if (clearStorage) {
+      setStoredToken(null)
+      localStorage.removeItem(USER_KEY)
+    }
   }
 
   return {
@@ -183,12 +108,3 @@ export const useUserStore = defineStore('user', () => {
     logout,
   }
 })
-
-/**
- * 模拟网络延迟。
- *
- * @param ms 毫秒
- */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
