@@ -91,7 +91,8 @@ docker run --rm -p 8080:8080 \
 
 | 变量 | 说明 |
 |------|------|
-| `DATABASE_URL` | **JDBC** 连接串，如 `jdbc:postgresql://HOST/neondb?sslmode=require`（不要用 `postgresql://` 裸协议） |
+| `DATABASE_URL` | **JDBC** 无凭据 URL，如 `jdbc:postgresql://HOST/neondb?sslmode=require`；或 Neon 的 `postgresql://user:pass@HOST/...`（自动拆分）。勿用 `jdbc:postgresql://user:pass@...` |
+| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | 当 `DATABASE_URL` 不含账号时必填 |
 | `JWT_SECRET` | JWT 签名密钥，生产环境务必更换 |
 
 ## 部署到 Vercel
@@ -152,7 +153,7 @@ vercel --prod # Production
 | `sh: java: not found` | 已改用 `eclipse-temurin:8-jre-jammy` + 绝对路径启动；请重新部署最新提交 |
 | `FUNCTION_INVOCATION_FAILED` / 日志 Path 为 `POST /index` | `/index` 是 Vercel 容器函数入口，不是业务路径。常见原因：① 容器未监听 **80**（`Dockerfile.vercel` 已默认 `PORT=80`）；② 缺少/错误的 `DATABASE_URL`；③ 冷启动超时（已设 `maxDuration: 60`）。请看 Runtime Logs 里 `[entrypoint]` 与 Spring 启动栈 |
 | Services / container 不可用 | 账号套餐需支持 [Vercel Services / Container](https://vercel.com/docs/services)；或将后端单独部署到 Railway/Fly 等，前端仍用 Vercel，并用 rewrite 代理 `/api` |
-| 后端启动失败 | 检查 `DATABASE_URL` 是否为 **JDBC** 形式（`jdbc:postgresql://...`），以及 `JWT_SECRET` 是否已配置。若粘贴了 Neon 的 `postgresql://...`，部署代码会自动加 `jdbc:` 前缀 |
+| 后端启动失败 | 检查 `DATABASE_URL`：推荐 `jdbc:postgresql://HOST/neondb?sslmode=require` + `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`。也可直接填 Neon 的 `postgresql://user:pass@HOST/...`（代码会自动拆分）。**不要**写成 `jdbc:postgresql://user:pass@HOST/...`（PG JDBC 会报 invalid port） |
 
 ## 相关文档
 

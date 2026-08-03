@@ -9,6 +9,8 @@ import org.springframework.util.StringUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,9 +20,10 @@ import java.util.Map;
 
 /**
  * 本地开发时自动加载项目根目录或 backend 目录下的 {@code .env}，
- * 并将 Neon 常见的 {@code postgresql://} 连接串规范为 JDBC URL。
+ * 并将 Neon / libpq 风格连接串规范为 Spring + PG JDBC 可用的形式。
  * <p>
- * 已由操作系统或启动参数注入的同名变量优先级更高，不会被覆盖。
+ * PG JDBC <strong>不接受</strong> {@code jdbc:postgresql://user:pass@host/db}（会把密码误解析为端口），
+ * 因此会拆出 username/password，URL 只保留 host/db/query。
  */
 public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
@@ -29,7 +32,7 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
     private static final String SPRING_DATASOURCE_URL = "SPRING_DATASOURCE_URL";
 
     /**
-     * 在 Spring Environment 构建早期注入 .env 中的键值。
+     * 在 Spring Environment 构建早期注入 .env 中的键值，并规范化数据源。
      *
      * @param environment 可配置环境
      * @param application Spring 应用
@@ -42,26 +45,18 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
                 mergeFile(candidate, dotenvValues);
             }
         }
-        if (dotenvValues.isEmpty()) {
-            normalizeExistingJdbcUrls(environment);
-            return;
-        }
 
-        normalizeDatabaseUrlInMap(dotenvValues);
-        // 不覆盖已存在的系统/环境变量
         Map<String, Object> toAdd = new LinkedHashMap<String, Object>();
         for (Map.Entry<String, Object> entry : dotenvValues.entrySet()) {
             if (!StringUtils.hasText(environment.getProperty(entry.getKey()))) {
                 toAdd.put(entry.getKey(), entry.getValue());
             }
         }
-        // 仅在提供时写入，避免空 username 覆盖 JDBC URL 内嵌凭据
-        putIfPresent(toAdd, environment, "SPRING_DATASOURCE_USERNAME", "spring.datasource.username");
-        putIfPresent(toAdd, environment, "SPRING_DATASOURCE_PASSWORD", "spring.datasource.password");
         if (!toAdd.isEmpty()) {
             environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, toAdd));
         }
-        normalizeExistingJdbcUrls(environment);
+
+        applyJdbcNormalization(environment);
     }
 
     /**
@@ -69,7 +64,7 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
      */
     @Override
     public int getOrder() {
-        return Ordered.LOWEST_PRECEDENCE;
+        return Ordered.HIGHEST_PRECEDENCE + 10;
     }
 
     /**
@@ -132,104 +127,149 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
     }
 
     /**
-     * 将 Map 中的 DATABASE_URL / SPRING_DATASOURCE_URL 规范为可用的 JDBC URL。
-     *
-     * @param values 属性 Map
-     */
-    private static void normalizeDatabaseUrlInMap(Map<String, Object> values) {
-        normalizeKeyInMap(values, DATABASE_URL);
-        normalizeKeyInMap(values, SPRING_DATASOURCE_URL);
-    }
-
-    /**
-     * 规范单个 URL 键。
-     *
-     * @param values 属性 Map
-     * @param key    键名
-     */
-    private static void normalizeKeyInMap(Map<String, Object> values, String key) {
-        Object raw = values.get(key);
-        if (raw instanceof String) {
-            String normalized = toJdbcUrl((String) raw);
-            if (normalized != null) {
-                values.put(key, normalized);
-            }
-        }
-    }
-
-    /**
-     * 若 Environment 中已有非 JDBC / 含不兼容参数的连接串，则高优先级覆盖为可用 JDBC 形式。
+     * 将 DATABASE_URL / SPRING_DATASOURCE_* 规范为 Spring DataSource 可用属性。
      *
      * @param environment 环境
      */
-    private static void normalizeExistingJdbcUrls(ConfigurableEnvironment environment) {
-        Map<String, Object> override = new LinkedHashMap<String, Object>();
-        putNormalizedOverride(override, environment, DATABASE_URL);
-        putNormalizedOverride(override, environment, SPRING_DATASOURCE_URL);
-        if (!override.isEmpty()) {
-            environment.getPropertySources().addFirst(
-                    new MapPropertySource(PROPERTY_SOURCE_NAME + "-jdbc-normalize", override));
-        }
-    }
-
-    /**
-     * 比较并写入需要覆盖的规范化 URL。
-     *
-     * @param override    覆盖 Map
-     * @param environment 环境
-     * @param key         键名
-     */
-    private static void putNormalizedOverride(Map<String, Object> override,
-                                              ConfigurableEnvironment environment,
-                                              String key) {
-        String raw = environment.getProperty(key);
-        String normalized = toJdbcUrl(raw);
-        if (normalized != null && !normalized.equals(raw)) {
-            override.put(key, normalized);
-        }
-    }
-
-    /**
-     * 若环境中尚未设置目标属性，则从别名键复制到 Spring DataSource 属性。
-     *
-     * @param toAdd       待添加属性
-     * @param environment 当前环境
-     * @param sourceKey   源键（如 SPRING_DATASOURCE_USERNAME）
-     * @param targetKey   目标键（如 spring.datasource.username）
-     */
-    private static void putIfPresent(Map<String, Object> toAdd, ConfigurableEnvironment environment,
-                                     String sourceKey, String targetKey) {
-        if (StringUtils.hasText(environment.getProperty(targetKey))) {
+    private static void applyJdbcNormalization(ConfigurableEnvironment environment) {
+        String springUrl = environment.getProperty(SPRING_DATASOURCE_URL);
+        String databaseUrl = environment.getProperty(DATABASE_URL);
+        String primaryRaw = StringUtils.hasText(springUrl) ? springUrl : databaseUrl;
+        if (!StringUtils.hasText(primaryRaw)) {
             return;
         }
-        Object value = toAdd.get(sourceKey);
-        if (value == null) {
-            value = environment.getProperty(sourceKey);
+
+        JdbcConnectionParts primary = parseJdbcConnection(primaryRaw);
+        if (primary == null) {
+            return;
         }
-        if (value instanceof String && StringUtils.hasText((String) value)) {
-            toAdd.put(targetKey, value);
+
+        // 主 URL 无 userinfo 时，尝试从 DATABASE_URL 提取账号
+        if (!StringUtils.hasText(primary.username)
+                && StringUtils.hasText(databaseUrl)
+                && !databaseUrl.equals(primaryRaw)) {
+            JdbcConnectionParts fromDb = parseJdbcConnection(databaseUrl);
+            if (fromDb != null && StringUtils.hasText(fromDb.username)) {
+                primary = new JdbcConnectionParts(primary.jdbcUrl, fromDb.username, fromDb.password);
+            }
         }
+
+        // 显式 SPRING_DATASOURCE_USERNAME / PASSWORD 优先
+        String explicitUser = firstNonBlank(
+                environment.getProperty("SPRING_DATASOURCE_USERNAME"),
+                environment.getProperty("spring.datasource.username"));
+        String explicitPass = firstNonBlank(
+                environment.getProperty("SPRING_DATASOURCE_PASSWORD"),
+                environment.getProperty("spring.datasource.password"));
+        if (StringUtils.hasText(explicitUser)) {
+            primary = new JdbcConnectionParts(
+                    primary.jdbcUrl,
+                    explicitUser,
+                    StringUtils.hasText(explicitPass) ? explicitPass : primary.password);
+        }
+
+        Map<String, Object> override = new LinkedHashMap<String, Object>();
+        override.put("spring.datasource.url", primary.jdbcUrl);
+        if (StringUtils.hasText(databaseUrl)) {
+            JdbcConnectionParts dbParts = parseJdbcConnection(databaseUrl);
+            if (dbParts != null) {
+                override.put(DATABASE_URL, dbParts.jdbcUrl);
+            }
+        }
+        if (StringUtils.hasText(springUrl)) {
+            JdbcConnectionParts springParts = parseJdbcConnection(springUrl);
+            if (springParts != null) {
+                override.put(SPRING_DATASOURCE_URL, springParts.jdbcUrl);
+            }
+        }
+        if (StringUtils.hasText(primary.username)) {
+            override.put("spring.datasource.username", primary.username);
+        }
+        if (primary.password != null) {
+            override.put("spring.datasource.password", primary.password);
+        }
+
+        environment.getPropertySources().addFirst(
+                new MapPropertySource(PROPERTY_SOURCE_NAME + "-jdbc-normalize", override));
     }
 
     /**
-     * 将 {@code postgresql://...} 转为 {@code jdbc:postgresql://...}；已是 JDBC 则原样返回。
+     * 返回第一个非空字符串。
+     *
+     * @param values 候选值
+     * @return 第一个有文本的值，或 null
+     */
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 解析 libpq / JDBC 连接串，拆出无 userinfo 的 JDBC URL 与账号密码。
      *
      * @param url 原始 URL
-     * @return JDBC URL；无法处理时返回 null
+     * @return 解析结果；无法识别时返回 null
      */
-    static String toJdbcUrl(String url) {
+    static JdbcConnectionParts parseJdbcConnection(String url) {
         if (!StringUtils.hasText(url)) {
             return null;
         }
         String trimmed = url.trim();
-        if (trimmed.startsWith("postgresql://") || trimmed.startsWith("postgres://")) {
-            trimmed = "jdbc:" + trimmed.replaceFirst("^postgres://", "postgresql://");
+        if (trimmed.startsWith("postgres://")) {
+            trimmed = "jdbc:postgresql://" + trimmed.substring("postgres://".length());
+        } else if (trimmed.startsWith("postgresql://")) {
+            trimmed = "jdbc:" + trimmed;
         }
-        if (!trimmed.startsWith("jdbc:")) {
+        if (!trimmed.startsWith("jdbc:postgresql://")) {
             return null;
         }
-        // Neon 控制台常带 channel_binding=require，旧版 PG JDBC 可能不兼容
-        return stripQueryParam(trimmed, "channel_binding");
+
+        String rest = trimmed.substring("jdbc:postgresql://".length());
+        int slash = rest.indexOf('/');
+        String authority = slash >= 0 ? rest.substring(0, slash) : rest;
+        String pathAndQuery = slash >= 0 ? rest.substring(slash) : "";
+
+        String username = null;
+        String password = null;
+        String hostPort = authority;
+        int at = authority.lastIndexOf('@');
+        if (at >= 0) {
+            String userInfo = authority.substring(0, at);
+            hostPort = authority.substring(at + 1);
+            int colon = userInfo.indexOf(':');
+            if (colon >= 0) {
+                username = urlDecode(userInfo.substring(0, colon));
+                password = urlDecode(userInfo.substring(colon + 1));
+            } else {
+                username = urlDecode(userInfo);
+            }
+        }
+
+        String jdbcUrl = stripQueryParam("jdbc:postgresql://" + hostPort + pathAndQuery, "channel_binding");
+        return new JdbcConnectionParts(jdbcUrl, username, password);
+    }
+
+    /**
+     * URL 解码（UTF-8）；失败时返回原文。
+     *
+     * @param value 编码值
+     * @return 解码值
+     */
+    private static String urlDecode(String value) {
+        try {
+            return URLDecoder.decode(value, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return value;
+        } catch (IllegalArgumentException e) {
+            return value;
+        }
     }
 
     /**
@@ -262,5 +302,25 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
             kept.append(part);
         }
         return kept.length() == 0 ? base : base + "?" + kept;
+    }
+
+    /**
+     * JDBC 连接解析结果。
+     */
+    static final class JdbcConnectionParts {
+        final String jdbcUrl;
+        final String username;
+        final String password;
+
+        /**
+         * @param jdbcUrl  无 userinfo 的 JDBC URL
+         * @param username 用户名（可空）
+         * @param password 密码（可空）
+         */
+        JdbcConnectionParts(String jdbcUrl, String username, String password) {
+            this.jdbcUrl = jdbcUrl;
+            this.username = username;
+            this.password = password;
+        }
     }
 }
