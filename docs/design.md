@@ -23,7 +23,7 @@ Vercel 路由 (vercel.json)
 | 前端 | Vue3 + Vite + TS + Pinia + Vue Router + Element Plus + Axios | SPA；构建产物 `dist` |
 | 后端 | Spring Boot 2.7 / Java 8 / JPA / Validation / Security(PasswordEncoder) / JJWT | 无状态 JWT |
 | 数据库 | Neon Postgres | 环境变量 `DATABASE_URL`（JDBC 形式） |
-| 部署 | Vercel `@vercel/static-build` + `@vercel/docker` | 见根目录 `vercel.json` |
+| 部署 | Vercel Services：前端 Vite + 后端 container/Dockerfile | 见根目录 `vercel.json` |
 
 ## 3. 后端分层
 
@@ -114,9 +114,11 @@ interceptor  →  JwtInterceptor：校验 Bearer，写入 request.userId
 
 ### 路由（vercel.json）
 
-1. `/api/(.*)` → Docker 后端
-2. 带扩展名的路径 → `frontend/dist` 静态文件
-3. 其余 → `frontend/dist/index.html`（Vue Router history）
+使用 Vercel **Services**（不再使用已下线的 `@vercel/docker` 构建器）：
+
+1. `frontend`：`framework: vite`，`root: frontend/`
+2. `backend`：`runtime: container`，`entrypoint: Dockerfile`
+3. rewrite：`/api/*` → `backend`；其余 → `frontend`
 
 ### 环境变量
 

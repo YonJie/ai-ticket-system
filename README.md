@@ -20,7 +20,7 @@ ai-ticket-system/
 | 前端 | Vue3、Vite、TypeScript、Vue Router、Pinia、Axios、Element Plus |
 | 后端 | Spring Boot 2.7、Java 8、Spring Web、Spring Data JPA、Spring Security、JJWT |
 | 数据库 | Neon Postgres（本地可用 `local` profile + H2 快速验证） |
-| 部署 | Vercel（前端 `@vercel/static-build` + 后端 `@vercel/docker`） |
+| 部署 | Vercel Services（前端 Vite + 后端 container/Dockerfile） |
 
 ## 本地开发
 
@@ -96,11 +96,13 @@ docker run --rm -p 8080:8080 \
 
 ## 部署到 Vercel
 
+> **说明**：Vercel 已不再提供 `@vercel/docker` 构建器。本项目使用官方 **Services** 配置：前端为 Vite 静态服务，后端为容器（`runtime: "container"` + `Dockerfile`）。
+
 ### 1. 导入项目
 
 1. 打开 [Vercel Dashboard](https://vercel.com/dashboard) → **Add New…** → **Project**
 2. 导入本 Git 仓库，**Root Directory** 保持仓库根目录（使用根目录 `vercel.json`）
-3. Framework Preset 可留空 / Other（由 `vercel.json` 的 `builds` 驱动）
+3. Framework / 项目类型选择支持 **Services** 的选项（若控制台有 Framework Preset，选 Other / Services，由 `vercel.json` 驱动）
 
 ### 2. 配置环境变量（必填）
 
@@ -122,11 +124,9 @@ vercel env add JWT_SECRET
 
 根目录 `vercel.json` 要点：
 
-- 前端：`@vercel/static-build`，构建 `frontend`，输出 `dist`
-- 后端：`@vercel/docker`，使用 `backend/Dockerfile`
-- `/api/*` → 后端容器
-- 带扩展名的静态资源 → `frontend/dist`
-- 其余前端路由 → `frontend/dist/index.html`（Vue Router history 模式）
+- **frontend**：`root: frontend/`，`framework: vite`（构建输出 `dist`）
+- **backend**：`runtime: container`，`entrypoint: Dockerfile`（多阶段 Maven + JRE）
+- 路由：`/api/*` → `backend` 服务；其余 → `frontend` 服务
 
 ### 4. 部署
 
@@ -143,6 +143,14 @@ vercel --prod # Production
 - 前端：`https://<your-project>.vercel.app/`
 - 健康检查：`https://<your-project>.vercel.app/api/health`
 - 演示账号（若 `DataInitializer` 已写入）：`customer` / `agent` / `admin`，密码 `123456`
+
+### 6. 若仍报错
+
+| 现象 | 处理 |
+|------|------|
+| `@vercel/docker` not published | 确认已拉取含新 `vercel.json`（Services）的提交后重新部署 |
+| Services / container 不可用 | 账号套餐需支持 [Vercel Services / Container](https://vercel.com/docs/services)；或将后端单独部署到 Railway/Fly 等，前端仍用 Vercel，并用 rewrite 代理 `/api` |
+| 后端启动失败 | 检查 `DATABASE_URL` 是否为 **JDBC** 形式（`jdbc:postgresql://...`），以及 `JWT_SECRET` 是否已配置 |
 
 ## 相关文档
 
