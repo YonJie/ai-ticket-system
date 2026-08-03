@@ -60,7 +60,51 @@ public class DotEnvEnvironmentPostProcessor implements EnvironmentPostProcessor,
             environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, toAdd));
         }
 
+        // 保证 DeepSeek 配置可被 Environment 直接读到（不依赖占位符解析时机）
+        promoteDeepSeekProperties(environment, dotenvValues);
+
         applyJdbcNormalization(environment);
+    }
+
+    /**
+     * 将 .env 中的 DEEPSEEK_* 提升为高优先级属性，避免被空占位符覆盖。
+     *
+     * @param environment  环境
+     * @param dotenvValues 已解析的 .env 键值
+     */
+    private static void promoteDeepSeekProperties(
+            ConfigurableEnvironment environment, Map<String, Object> dotenvValues) {
+        Map<String, Object> promote = new LinkedHashMap<String, Object>();
+        copyIfPresent(dotenvValues, promote, "DEEPSEEK_API_KEY");
+        copyIfPresent(dotenvValues, promote, "DEEPSEEK_BASE_URL");
+        copyIfPresent(dotenvValues, promote, "DEEPSEEK_MODEL");
+        copyIfPresent(dotenvValues, promote, "DEEPSEEK_TIMEOUT_MS");
+        // 系统/进程环境变量同样提升
+        copyEnvIfPresent(promote, "DEEPSEEK_API_KEY");
+        copyEnvIfPresent(promote, "DEEPSEEK_BASE_URL");
+        copyEnvIfPresent(promote, "DEEPSEEK_MODEL");
+        copyEnvIfPresent(promote, "DEEPSEEK_TIMEOUT_MS");
+        if (!promote.isEmpty()) {
+            environment.getPropertySources().addFirst(
+                    new MapPropertySource(PROPERTY_SOURCE_NAME + "-deepseek", promote));
+        }
+    }
+
+    private static void copyIfPresent(Map<String, Object> source, Map<String, Object> target, String key) {
+        Object value = source.get(key);
+        if (value != null && StringUtils.hasText(String.valueOf(value))) {
+            target.put(key, String.valueOf(value).trim());
+        }
+    }
+
+    private static void copyEnvIfPresent(Map<String, Object> target, String key) {
+        if (target.containsKey(key)) {
+            return;
+        }
+        String value = System.getenv(key);
+        if (StringUtils.hasText(value)) {
+            target.put(key, value.trim());
+        }
     }
 
     /**

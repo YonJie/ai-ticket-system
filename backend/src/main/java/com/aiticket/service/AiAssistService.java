@@ -39,6 +39,7 @@ public class AiAssistService {
         AiAssistResult fallback = ruleBasedAiAssistService.analyze(title, description);
 
         if (!deepSeekAiClient.isConfigured()) {
+            log.info("未检测到 DEEPSEEK_API_KEY，使用规则回退（固定建议回复）");
             return fallback;
         }
 
@@ -50,6 +51,7 @@ public class AiAssistService {
             String suggestedReply = StringUtils.hasText(remote.getSuggestedReply())
                     ? remote.getSuggestedReply()
                     : fallback.getSuggestedReply();
+            log.info("DeepSeek 分析完成: category={}", category);
             return new AiAssistResult(category, suggestedReply);
         } catch (Exception ex) {
             log.warn("DeepSeek 调用失败，回退规则分类与固定建议回复: {}", ex.getMessage());

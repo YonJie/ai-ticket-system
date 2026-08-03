@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -48,23 +49,50 @@ public class DeepSeekAiClient {
     private final RestTemplate restTemplate;
 
     /**
+     * 从 Environment 读取配置。优先 {@code DEEPSEEK_*}（.env / 系统环境变量），
+     * 避免 {@code ai.deepseek.api-key=${DEEPSEEK_API_KEY:}} 在 DotEnv 注入前被解析成空串。
+     *
+     * @param environment  Spring 环境
+     * @param objectMapper Jackson
+     */
+    @Autowired
+    public DeepSeekAiClient(Environment environment, ObjectMapper objectMapper) {
+        this(
+                firstNonBlank(
+                        environment.getProperty("DEEPSEEK_API_KEY"),
+                        environment.getProperty("ai.deepseek.api-key")),
+                firstNonBlank(
+                        environment.getProperty("DEEPSEEK_BASE_URL"),
+                        environment.getProperty("ai.deepseek.base-url"),
+                        "https://api.deepseek.com"),
+                firstNonBlank(
+                        environment.getProperty("DEEPSEEK_MODEL"),
+                        environment.getProperty("ai.deepseek.model"),
+                        "deepseek-v4-flash"),
+                parseTimeoutMs(environment),
+                objectMapper);
+    }
+
+    /**
      * @param apiKey       DeepSeek API Key，可为空
      * @param baseUrl      API Base URL
      * @param model        模型名，默认 deepseek-v4-flash
      * @param timeoutMs    超时毫秒
      * @param objectMapper Jackson
      */
-    public DeepSeekAiClient(
-            @Value("${ai.deepseek.api-key:}") String apiKey,
-            @Value("${ai.deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-            @Value("${ai.deepseek.model:deepseek-v4-flash}") String model,
-            @Value("${ai.deepseek.timeout-ms:8000}") int timeoutMs,
+    DeepSeekAiClient(
+            String apiKey,
+            String baseUrl,
+            String model,
+            int timeoutMs,
             ObjectMapper objectMapper) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.baseUrl = trimTrailingSlash(baseUrl == null ? "https://api.deepseek.com" : baseUrl.trim());
         this.model = StringUtils.hasText(model) ? model.trim() : "deepseek-v4-flash";
         this.objectMapper = objectMapper;
         this.restTemplate = createRestTemplate(timeoutMs);
+        log.info("DeepSeek 客户端就绪: configured={}, model={}, baseUrl={}",
+                StringUtils.hasText(this.apiKey), this.model, this.baseUrl);
     }
 
     /**
@@ -85,6 +113,7 @@ public class DeepSeekAiClient {
      */
     public AiAssistResult analyze(String title, String description) {
         String url = baseUrl + "/chat/completions";
+        log.info("调用 DeepSeek Chat Completions: model={}, url={}", model, url);
 
         Map<String, Object> thinking = new HashMap<String, Object>();
         thinking.put("type", "disabled");
@@ -196,6 +225,32 @@ public class DeepSeekAiClient {
             return url.substring(0, url.length() - 1);
         }
         return url;
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static int parseTimeoutMs(Environment environment) {
+        String raw = firstNonBlank(
+                environment.getProperty("DEEPSEEK_TIMEOUT_MS"),
+                environment.getProperty("ai.deepseek.timeout-ms"));
+        if (!StringUtils.hasText(raw)) {
+            return 8000;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ex) {
+            return 8000;
+        }
     }
 
     private static RestTemplate createRestTemplate(int timeoutMs) {
