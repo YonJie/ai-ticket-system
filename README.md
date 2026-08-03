@@ -151,9 +151,10 @@ vercel --prod # Production
 |------|------|
 | `@vercel/docker` not published | 确认已拉取含新 `vercel.json`（Services）的提交后重新部署 |
 | `sh: java: not found` | 已改用 `eclipse-temurin:8-jre-jammy` + 绝对路径启动；请重新部署最新提交 |
-| `FUNCTION_INVOCATION_FAILED` / 日志 Path 为 `POST /index` | `/index` 是 Vercel 容器函数入口，不是业务路径。常见原因：① 容器未监听 **80**（`Dockerfile.vercel` 已默认 `PORT=80`）；② 缺少/错误的 `DATABASE_URL`；③ 冷启动超时（已设 `maxDuration: 60`）。请看 Runtime Logs 里 `[entrypoint]` 与 Spring 启动栈 |
+| `FUNCTION_INVOCATION_FAILED` / 日志 Path 为 `POST /index` | `/index` 是 Vercel 容器函数入口。常见原因：① 端口未在 15s 内就绪（Java 冷启动慢；`Dockerfile.vercel` 已用 socat 抢先监听 `$PORT`）；② `DATABASE_URL` 含 `user:pass@host` 的错误 JDBC 写法；③ 缺环境变量。请看 Runtime Logs 中 `[entrypoint]` / Hikari / Tomcat |
+| `could not connect to $PORT` / startup timeout (15s) | Spring 要等 JPA 初始化完才真正 listen。已用 socat 提前 accept；仍失败则检查镜像是否含 socat、日志是否有 `[entrypoint] socat started` |
 | Services / container 不可用 | 账号套餐需支持 [Vercel Services / Container](https://vercel.com/docs/services)；或将后端单独部署到 Railway/Fly 等，前端仍用 Vercel，并用 rewrite 代理 `/api` |
-| 后端启动失败 | 检查 `DATABASE_URL`：推荐 `jdbc:postgresql://HOST/neondb?sslmode=require` + `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`。也可直接填 Neon 的 `postgresql://user:pass@HOST/...`（代码会自动拆分）。**不要**写成 `jdbc:postgresql://user:pass@HOST/...`（PG JDBC 会报 invalid port） |
+| 后端启动失败 | 检查 `DATABASE_URL`：推荐 `jdbc:postgresql://HOST/neondb?sslmode=require` + `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`。也可直接填 Neon 的 `postgresql://user:pass@HOST/...`（代码会自动拆分）。**不要**写成 `jdbc:postgresql://user:pass@HOST/...` |
 
 ## 相关文档
 
