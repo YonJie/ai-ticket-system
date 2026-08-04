@@ -10,6 +10,7 @@
 | [AI_PROMPTS.md](./AI_PROMPTS.md) | DeepSeek 调用参数、提示词与规则回退约定 |
 | [TESTING.md](./TESTING.md) | 测试说明：如何运行、覆盖场景与已知风险 |
 | [PROMPTS.md](./PROMPTS.md) | **多 Agent 协同开发提示词实录**（任务拆分、并行约束、整合方式） |
+| [VERCEL_DEPLOY_PROMPT.md](./VERCEL_DEPLOY_PROMPT.md) | **可复用**：前后端同域部署 Vercel 的完整 Prompt（Services / SPA / socat） |
 
 仓库根目录还提供：
 

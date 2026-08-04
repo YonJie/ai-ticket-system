@@ -27,7 +27,8 @@
 阶段 E 质量与交付（串行）
   ├─ Agent：前后端自动化测试 + TESTING.md
   ├─ Agent：Vercel 部署配置完善
-  └─ Agent：docs 空文档补全 / PROMPTS 实录
+  ├─ Agent：docs 空文档补全 / PROMPTS 实录
+  └─ （可复用）Vercel 同域部署规范 Prompt → [VERCEL_DEPLOY_PROMPT.md](./VERCEL_DEPLOY_PROMPT.md)
 ```
 
 **共享约定（写入各并行 Agent 提示词，降低冲突）**
@@ -303,7 +304,7 @@ GET /api/stats/daily（仅管理员）
 
 （落地后测试说明归入 `docs/TESTING.md`。）
 
-### 6.2 部署配置
+### 6.2 部署配置（初版）
 
 **同一会话后续提示**（约 15:24）：
 
@@ -321,6 +322,28 @@ GET /api/stats/daily（仅管理员）
 
 ```text
 补充一下根目录下的 docs 目录下的对应 md 文件内容
+```
+
+### 6.4 Vercel 同域部署规范 Prompt（可复用，2026-08-04）
+
+**角色**：部署规范沉淀（会话：SPA 刷新 404 排查 + 部署经验收口）  
+**完整正文（下次直接复制给 Agent）**：[VERCEL_DEPLOY_PROMPT.md](./VERCEL_DEPLOY_PROMPT.md)
+
+相对 6.2 初版的关键增量：
+
+1. 改用 Vercel **Services**（`runtime: "container"`），禁止 `@vercel/docker`
+2. 双层 rewrite：顶层选 service；**frontend 内** `/(.*) → /index.html`（防 History 刷新 404）
+3. `Dockerfile.vercel` + `socat` 抢 `$PORT`，规避 Java 冷启动超 15s
+4. 前端 Axios `baseURL: '/api'` + Vite 本地 proxy；同域无硬编码后端域名
+5. Neon `DATABASE_URL` 写法约束 + 环境变量 / CLI / 验收清单 / 故障表
+
+**开场摘要（粘贴完整版前可先说明意图）**：
+
+```text
+请按 docs/VERCEL_DEPLOY_PROMPT.md 完成前后端同域部署到 Vercel：
+Services（Vite + container）、双层 rewrite（含 SPA fallback）、
+Dockerfile.vercel + socat、同域 /api、环境变量与验收清单。
+禁止 @vercel/docker。完成后验证 /api/health 与子路由刷新不 404。
 ```
 
 ---
@@ -342,6 +365,7 @@ GET /api/stats/daily（仅管理员）
 | E1  | 测试               | MockMvc / Vitest、`docs/TESTING.md`                                       |
 | E2  | 部署               | 多阶段 Dockerfile、`vercel.json`、README 部署节                                  |
 | E3  | 文档               | PRD / design / docs 索引 / 本文                                              |
+| E4  | 部署规范可复用 Prompt | [VERCEL_DEPLOY_PROMPT.md](./VERCEL_DEPLOY_PROMPT.md)（Services / SPA / socat） |
 
 
 ---
@@ -361,5 +385,6 @@ GET /api/stats/daily（仅管理员）
 
 - 新增一次有意义的 Agent/SubAgent 任务时，在对应阶段追加「提示词」与「产物」两行。  
 - 提示词可做不影响语义的精简，但应保留：**目标接口、项目约定、并行约束、禁止事项、完成回报格式**。  
-- 会话 UUID 便于回溯 Cursor agent-transcripts，可不对外公开路径细节。
+- 会话 UUID 便于回溯 Cursor agent-transcripts，可不对外公开路径细节。  
+- **Vercel 部署规范**以 [VERCEL_DEPLOY_PROMPT.md](./VERCEL_DEPLOY_PROMPT.md) 为唯一完整正文；本文件 6.4 节只保留索引与增量说明，避免双份漂移。
 
