@@ -62,24 +62,34 @@ async function handleSubmit() {
 <template>
   <div class="page">
     <AppHeader />
-    <main class="main">
+    <main id="main-content" class="main" tabindex="-1">
       <el-card class="card" shadow="never">
         <h1>登录</h1>
         <p class="hint">演示账号：customer / agent / admin，密码均为 123456</p>
-        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleSubmit">
           <el-form-item label="用户名" prop="username">
-            <el-input v-model="form.username" autocomplete="username" />
+            <el-input
+              v-model="form.username"
+              name="username"
+              autocomplete="username"
+              :spellcheck="false"
+            />
           </el-form-item>
           <el-form-item label="密码" prop="password">
             <el-input
               v-model="form.password"
+              name="password"
               type="password"
               show-password
               autocomplete="current-password"
-              @keyup.enter="handleSubmit"
             />
           </el-form-item>
-          <el-button type="primary" :loading="submitting" style="width: 100%" @click="handleSubmit">
+          <el-button
+            type="primary"
+            native-type="submit"
+            :loading="submitting"
+            style="width: 100%"
+          >
             登录
           </el-button>
         </el-form>
@@ -104,6 +114,7 @@ async function handleSubmit() {
   display: grid;
   place-items: center;
   padding: 48px 16px;
+  scroll-margin-top: 72px;
 }
 
 .card {

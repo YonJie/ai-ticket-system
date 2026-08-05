@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { roleLabels } from '@/utils/ticketLabels'
 
@@ -12,9 +13,18 @@ const roleText = computed(() =>
 )
 
 /**
- * 退出登录。
+ * 退出登录（需确认）。
  */
-function handleLogout() {
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm('确定退出登录？', '提示', {
+      type: 'warning',
+      confirmButtonText: '退出',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
   userStore.logout()
   void router.push('/login')
 }
@@ -22,7 +32,7 @@ function handleLogout() {
 
 <template>
   <header class="app-header">
-    <div class="brand" @click="router.push('/')">AI 智能客服工单系统</div>
+    <router-link class="brand" to="/" translate="no">AI 智能客服工单系统</router-link>
     <div v-if="userStore.isLoggedIn" class="user-area">
       <span class="meta">{{ userStore.userInfo?.username }}（{{ roleText }}）</span>
       <el-button size="small" @click="handleLogout">退出</el-button>
@@ -36,6 +46,9 @@ function handleLogout() {
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  padding-left: calc(24px + env(safe-area-inset-left, 0px));
+  padding-right: calc(24px + env(safe-area-inset-right, 0px));
   background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid #e5e7eb;
   backdrop-filter: blur(8px);
@@ -48,7 +61,17 @@ function handleLogout() {
   font-weight: 700;
   font-size: 1.05rem;
   color: #0f172a;
-  cursor: pointer;
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: #1d4ed8;
+}
+
+.brand:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .user-area {

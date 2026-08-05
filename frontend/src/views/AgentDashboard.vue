@@ -1,15 +1,43 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { isHandledApiError } from '@/types/api'
 import type { Ticket, TicketStatus } from '@/types/ticket'
 import { useTicketStore } from '@/stores/ticket'
 import AppHeader from '@/components/AppHeader.vue'
+import { formatDateTime } from '@/utils/datetime'
 import { ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
 
 const ticketStore = useTicketStore()
+const route = useRoute()
 const router = useRouter()
-const statusFilter = ref<TicketStatus | undefined>(undefined)
+
+const STATUS_VALUES: TicketStatus[] = ['PENDING', 'PROCESSING', 'RESOLVED', 'CLOSED']
+
+/**
+ * 解析 URL 中的 status；非法值返回 undefined。
+ *
+ * @param raw query 原始值
+ */
+function parseStatus(raw: unknown): TicketStatus | undefined {
+  if (typeof raw !== 'string') return undefined
+  return STATUS_VALUES.includes(raw as TicketStatus) ? (raw as TicketStatus) : undefined
+}
+
+const statusFilter = computed<TicketStatus | undefined>({
+  get() {
+    return parseStatus(route.query.status)
+  },
+  set(val) {
+    const query = { ...route.query }
+    if (val) {
+      query.status = val
+    } else {
+      delete query.status
+    }
+    void router.replace({ path: '/agent', query })
+  },
+})
 
 /**
  * 按筛选加载列表。
@@ -25,35 +53,44 @@ async function loadList() {
 }
 
 onMounted(() => {
-  void loadList()
+  if (route.query.status != null && statusFilter.value === undefined) {
+    const query = { ...route.query }
+    delete query.status
+    void router.replace({ path: '/agent', query })
+  }
 })
 
-watch(statusFilter, () => {
-  void loadList()
-})
-
-/**
- * 进入客服处理页。
- *
- * @param row 表格行
- */
-function goDetail(row: Ticket) {
-  void router.push(`/agent/tickets/${row.id}`)
-}
+watch(
+  () => route.query.status,
+  () => {
+    void loadList()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="page">
     <AppHeader />
-    <main class="main">
+    <main id="main-content" class="main" tabindex="-1">
       <div class="toolbar">
         <h1>客服后台</h1>
-        <el-select v-model="statusFilter" clearable placeholder="全部状态" style="width: 180px">
-          <el-option label="待处理" value="PENDING" />
-          <el-option label="处理中" value="PROCESSING" />
-          <el-option label="已解决" value="RESOLVED" />
-          <el-option label="已关闭" value="CLOSED" />
-        </el-select>
+        <div class="filter">
+          <label class="filter-label" for="agent-status-filter">状态</label>
+          <el-select
+            id="agent-status-filter"
+            v-model="statusFilter"
+            clearable
+            placeholder="全部状态"
+            aria-label="按状态筛选工单"
+            style="width: 180px"
+          >
+            <el-option label="待处理" value="PENDING" />
+            <el-option label="处理中" value="PROCESSING" />
+            <el-option label="已解决" value="RESOLVED" />
+            <el-option label="已关闭" value="CLOSED" />
+          </el-select>
+        </div>
       </div>
       <el-table
         v-loading="ticketStore.loading"
@@ -61,9 +98,14 @@ function goDetail(row: Ticket) {
         stripe
         empty-text="暂无工单"
         style="width: 100%"
-        @row-click="goDetail"
       >
-        <el-table-column prop="title" label="标题" min-width="180" />
+        <el-table-column label="标题" min-width="180">
+          <template #default="{ row }: { row: Ticket }">
+            <router-link class="title-link" :to="`/agent/tickets/${row.id}`">
+              {{ row.title }}
+            </router-link>
+          </template>
+        </el-table-column>
         <el-table-column prop="customerUsername" label="客户" width="120" />
         <el-table-column prop="category" label="分类" width="100" />
         <el-table-column label="状态" width="120">
@@ -78,10 +120,14 @@ function goDetail(row: Ticket) {
             {{ row.assignedTo ? '已指派' : '未指派' }}
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
+        <el-table-column label="创建时间" min-width="180">
+          <template #default="{ row }: { row: Ticket }">
+            <span class="tabular-nums">{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }: { row: Ticket }">
-            <el-button link type="primary" @click.stop="goDetail(row)">处理</el-button>
+            <router-link class="title-link" :to="`/agent/tickets/${row.id}`">处理</router-link>
           </template>
         </el-table-column>
       </el-table>
@@ -99,6 +145,7 @@ function goDetail(row: Ticket) {
   max-width: 1180px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+  scroll-margin-top: 72px;
 }
 
 .toolbar {
@@ -109,12 +156,20 @@ function goDetail(row: Ticket) {
   gap: 12px;
 }
 
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  color: #475569;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
 h1 {
   margin: 0;
   font-size: 1.4rem;
-}
-
-:deep(.el-table__row) {
-  cursor: pointer;
 }
 </style>

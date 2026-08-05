@@ -73,9 +73,9 @@ describe('LoginView', () => {
       },
     })
 
-    const button = wrapper.findAll('button').find((b) => b.text().includes('登录'))
-    expect(button).toBeTruthy()
-    await button!.trigger('click')
+    const form = wrapper.find('form')
+    expect(form.exists()).toBe(true)
+    await form.trigger('submit')
     await flushPromises()
 
     expect(loginSpy).toHaveBeenCalledWith({

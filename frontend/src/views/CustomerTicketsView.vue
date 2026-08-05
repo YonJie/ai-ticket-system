@@ -1,43 +1,33 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { isHandledApiError } from '@/types/api'
 import { useTicketStore } from '@/stores/ticket'
 import AppHeader from '@/components/AppHeader.vue'
+import { formatDateTime } from '@/utils/datetime'
 import { ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
 import type { Ticket } from '@/types/ticket'
 
 const ticketStore = useTicketStore()
-const router = useRouter()
 
 onMounted(async () => {
   try {
     await ticketStore.fetchTickets()
   } catch (e) {
     if (!isHandledApiError(e)) {
-      // 本地校验类错误才提示
       console.error(e)
     }
   }
 })
-
-/**
- * 进入工单详情。
- *
- * @param row 表格行
- */
-function goDetail(row: Ticket) {
-  void router.push(`/tickets/${row.id}`)
-}
 </script>
 
 <template>
   <div class="page">
     <AppHeader />
-    <main class="main">
+    <main id="main-content" class="main" tabindex="-1">
       <div class="toolbar">
         <h1>我的工单</h1>
-        <el-button type="primary" @click="router.push('/tickets/new')">新建工单</el-button>
+        <el-button type="primary" :tag="RouterLink" to="/tickets/new">新建工单</el-button>
       </div>
       <el-table
         v-loading="ticketStore.loading"
@@ -45,9 +35,14 @@ function goDetail(row: Ticket) {
         stripe
         empty-text="暂无工单，点击右上角新建"
         style="width: 100%"
-        @row-click="goDetail"
       >
-        <el-table-column prop="title" label="标题" min-width="180" />
+        <el-table-column label="标题" min-width="180">
+          <template #default="{ row }: { row: Ticket }">
+            <router-link class="title-link" :to="`/tickets/${row.id}`">
+              {{ row.title }}
+            </router-link>
+          </template>
+        </el-table-column>
         <el-table-column prop="category" label="分类" width="100" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }: { row: Ticket }">
@@ -56,10 +51,14 @@ function goDetail(row: Ticket) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
+        <el-table-column label="创建时间" min-width="180">
+          <template #default="{ row }: { row: Ticket }">
+            <span class="tabular-nums">{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }: { row: Ticket }">
-            <el-button link type="primary" @click.stop="goDetail(row)">查看</el-button>
+            <router-link class="title-link" :to="`/tickets/${row.id}`">查看</router-link>
           </template>
         </el-table-column>
       </el-table>
@@ -77,6 +76,7 @@ function goDetail(row: Ticket) {
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+  scroll-margin-top: 72px;
 }
 
 .toolbar {
@@ -84,14 +84,11 @@ function goDetail(row: Ticket) {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
 h1 {
   margin: 0;
   font-size: 1.4rem;
-}
-
-:deep(.el-table__row) {
-  cursor: pointer;
 }
 </style>

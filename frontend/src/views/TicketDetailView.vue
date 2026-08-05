@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { isHandledApiError } from '@/types/api'
 import { useTicketStore } from '@/stores/ticket'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import AppHeader from '@/components/AppHeader.vue'
+import { formatDateTime } from '@/utils/datetime'
 import { ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
 
 const route = useRoute()
@@ -18,11 +20,14 @@ const feedbackForm = reactive({
   comment: '',
 })
 const submitting = ref(false)
+const allowLeave = ref(false)
 
 const ticket = computed(() => ticketStore.currentTicket)
 const canFeedback = computed(
   () => ticket.value?.status === 'RESOLVED' && !ticket.value?.feedback,
 )
+const isDirty = computed(() => !allowLeave.value && Boolean(messageContent.value.trim()))
+useUnsavedGuard(isDirty)
 
 /**
  * 判断留言是否来自工单客户。
@@ -40,6 +45,7 @@ onMounted(async () => {
     if (!isHandledApiError(e)) {
       ElMessage.error(e instanceof Error ? e.message : '加载失败')
     }
+    allowLeave.value = true
     void router.replace('/tickets')
   }
 })
@@ -97,7 +103,12 @@ async function handleSubmitFeedback() {
 <template>
   <div class="page">
     <AppHeader />
-    <main v-loading="ticketStore.loading && !ticket" class="main">
+    <main
+      id="main-content"
+      v-loading="ticketStore.loading && !ticket"
+      class="main"
+      tabindex="-1"
+    >
       <template v-if="ticket">
         <div class="toolbar">
           <h1>工单详情</h1>
@@ -105,37 +116,41 @@ async function handleSubmitFeedback() {
             <el-button v-if="canFeedback" type="warning" @click="feedbackVisible = true">
               评价
             </el-button>
-            <el-button @click="router.push('/tickets')">返回列表</el-button>
+            <el-button :tag="RouterLink" to="/tickets">返回列表</el-button>
           </div>
         </div>
 
         <el-card shadow="never" class="section">
           <div class="title-row">
-            <h2>{{ ticket.title }}</h2>
+            <h2 class="truncate-title" :title="ticket.title">{{ ticket.title }}</h2>
             <el-tag :type="ticketStatusTagType[ticket.status]">
               {{ ticketStatusLabels[ticket.status] }}
             </el-tag>
           </div>
-          <p class="desc">{{ ticket.description }}</p>
+          <p class="desc break-words">{{ ticket.description }}</p>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="分类">{{ ticket.category || '-' }}</el-descriptions-item>
             <el-descriptions-item label="客户">{{ ticket.customerUsername }}</el-descriptions-item>
             <el-descriptions-item label="处理人">
               {{ ticket.assignedTo ? '已指派' : '未指派' }}
             </el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ ticket.createdAt }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">
+              <span class="tabular-nums">{{ formatDateTime(ticket.createdAt) }}</span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-card>
 
         <el-card shadow="never" class="section">
           <h3>AI 建议回复</h3>
-          <p class="ai">{{ ticket.aiSuggestedReply || '暂无建议回复' }}</p>
+          <p class="ai break-words">{{ ticket.aiSuggestedReply || '暂无建议回复' }}</p>
         </el-card>
 
         <el-card v-if="ticket.feedback" shadow="never" class="section">
           <h3>我的评价</h3>
           <el-rate :model-value="ticket.feedback.rating" disabled />
-          <p v-if="ticket.feedback.comment" class="feedback-comment">{{ ticket.feedback.comment }}</p>
+          <p v-if="ticket.feedback.comment" class="feedback-comment break-words">
+            {{ ticket.feedback.comment }}
+          </p>
         </el-card>
 
         <el-card shadow="never" class="section">
@@ -145,15 +160,17 @@ async function handleSubmitFeedback() {
               <div class="msg-head">
                 <strong>{{ msg.username }}</strong>
                 <span class="role">{{ isCustomerMessage(msg.userId) ? '客户' : '客服' }}</span>
-                <span class="time">{{ msg.createdAt }}</span>
+                <span class="time tabular-nums">{{ formatDateTime(msg.createdAt) }}</span>
               </div>
-              <p>{{ msg.content }}</p>
+              <p class="break-words">{{ msg.content }}</p>
             </div>
           </div>
           <el-empty v-else description="暂无留言" :image-size="60" />
           <div class="composer">
             <el-input
               v-model="messageContent"
+              name="message"
+              autocomplete="off"
               type="textarea"
               :rows="3"
               placeholder="追加留言…"
@@ -167,13 +184,26 @@ async function handleSubmitFeedback() {
       <el-empty v-else-if="!ticketStore.loading" description="工单不存在或无权查看" />
     </main>
 
-    <el-dialog v-model="feedbackVisible" title="服务评价" width="420px">
+    <el-dialog
+      v-model="feedbackVisible"
+      title="服务评价"
+      width="420px"
+      class="feedback-dialog"
+      append-to-body
+    >
       <el-form label-position="top">
         <el-form-item label="评分">
           <el-rate v-model="feedbackForm.rating" />
         </el-form-item>
         <el-form-item label="评论（可选）">
-          <el-input v-model="feedbackForm.comment" type="textarea" :rows="3" />
+          <el-input
+            v-model="feedbackForm.comment"
+            name="feedbackComment"
+            autocomplete="off"
+            type="textarea"
+            :rows="3"
+            placeholder="说说本次服务体验…"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -196,6 +226,7 @@ async function handleSubmitFeedback() {
   max-width: 860px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+  scroll-margin-top: 72px;
 }
 
 .toolbar {
@@ -237,6 +268,7 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .desc {
@@ -278,6 +310,7 @@ h3 {
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
+  min-width: 0;
 }
 
 .role {
@@ -299,5 +332,11 @@ h3 {
 .feedback-comment {
   margin: 8px 0 0;
   color: #475569;
+}
+</style>
+
+<style>
+.feedback-dialog .el-dialog__body {
+  overscroll-behavior: contain;
 }
 </style>

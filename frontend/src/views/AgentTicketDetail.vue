@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { isHandledApiError } from '@/types/api'
 import type { TicketStatus } from '@/types/ticket'
 import { useTicketStore } from '@/stores/ticket'
 import { useUserStore } from '@/stores/user'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import AppHeader from '@/components/AppHeader.vue'
+import { formatDateTime } from '@/utils/datetime'
 import { ticketStatusLabels, ticketStatusTagType } from '@/utils/ticketLabels'
 
 const route = useRoute()
@@ -17,8 +19,11 @@ const userStore = useUserStore()
 const replyContent = ref('')
 const statusValue = ref<TicketStatus>('PENDING')
 const submitting = ref(false)
+const allowLeave = ref(false)
 
 const ticket = computed(() => ticketStore.currentTicket)
+const isDirty = computed(() => !allowLeave.value && Boolean(replyContent.value.trim()))
+useUnsavedGuard(isDirty)
 
 watch(
   ticket,
@@ -44,6 +49,7 @@ onMounted(async () => {
     if (!isHandledApiError(e)) {
       ElMessage.error(e instanceof Error ? e.message : '加载失败')
     }
+    allowLeave.value = true
     void router.replace('/agent')
   }
 })
@@ -53,10 +59,26 @@ onUnmounted(() => {
 })
 
 /**
- * 修改工单状态（需携带 updatedAt）。
+ * 修改工单状态（需携带 updatedAt）；关闭需确认。
+ *
+ * @param status 目标状态
  */
 async function handleStatusChange(status: TicketStatus) {
   if (!ticket.value) return
+
+  if (status === 'CLOSED') {
+    try {
+      await ElMessageBox.confirm('确定关闭该工单？关闭后将结束处理流程。', '确认关闭', {
+        type: 'warning',
+        confirmButtonText: '关闭工单',
+        cancelButtonText: '取消',
+      })
+    } catch {
+      statusValue.value = ticket.value.status
+      return
+    }
+  }
+
   submitting.value = true
   try {
     await ticketStore.updateTicket(String(route.params.id), {
@@ -103,36 +125,45 @@ async function handleReply() {
 <template>
   <div class="page">
     <AppHeader />
-    <main v-loading="ticketStore.loading && !ticket" class="main">
+    <main
+      id="main-content"
+      v-loading="ticketStore.loading && !ticket"
+      class="main"
+      tabindex="-1"
+    >
       <template v-if="ticket">
         <div class="toolbar">
           <h1>工单处理</h1>
-          <el-button @click="router.push('/agent')">返回后台</el-button>
+          <el-button :tag="RouterLink" to="/agent">返回后台</el-button>
         </div>
 
         <el-card shadow="never" class="section">
           <div class="title-row">
-            <h2>{{ ticket.title }}</h2>
+            <h2 class="truncate-title" :title="ticket.title">{{ ticket.title }}</h2>
             <el-tag :type="ticketStatusTagType[ticket.status]">
               {{ ticketStatusLabels[ticket.status] }}
             </el-tag>
           </div>
-          <p class="desc">{{ ticket.description }}</p>
+          <p class="desc break-words">{{ ticket.description }}</p>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="分类">{{ ticket.category || '-' }}</el-descriptions-item>
             <el-descriptions-item label="客户">{{ ticket.customerUsername }}</el-descriptions-item>
             <el-descriptions-item label="处理人">
               {{ ticket.assignedTo ? '已指派' : '未指派' }}
             </el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ ticket.createdAt }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">
+              <span class="tabular-nums">{{ formatDateTime(ticket.createdAt) }}</span>
+            </el-descriptions-item>
           </el-descriptions>
 
           <div class="status-row">
-            <span>修改状态</span>
+            <label class="status-label" for="agent-ticket-status">修改状态</label>
             <el-select
+              id="agent-ticket-status"
               v-model="statusValue"
               style="width: 180px"
               :disabled="submitting"
+              aria-label="修改工单状态"
               @change="handleStatusChange"
             >
               <el-option label="待处理" value="PENDING" />
@@ -145,7 +176,7 @@ async function handleReply() {
 
         <el-card shadow="never" class="section">
           <h3>AI 建议回复</h3>
-          <p class="ai">{{ ticket.aiSuggestedReply || '暂无建议回复' }}</p>
+          <p class="ai break-words">{{ ticket.aiSuggestedReply || '暂无建议回复' }}</p>
           <el-button
             size="small"
             :disabled="!ticket.aiSuggestedReply"
@@ -158,7 +189,9 @@ async function handleReply() {
         <el-card v-if="ticket.feedback" shadow="never" class="section">
           <h3>客户评价</h3>
           <el-rate :model-value="ticket.feedback.rating" disabled />
-          <p v-if="ticket.feedback.comment" class="feedback-comment">{{ ticket.feedback.comment }}</p>
+          <p v-if="ticket.feedback.comment" class="feedback-comment break-words">
+            {{ ticket.feedback.comment }}
+          </p>
         </el-card>
 
         <el-card shadow="never" class="section">
@@ -168,15 +201,17 @@ async function handleReply() {
               <div class="msg-head">
                 <strong>{{ msg.username }}</strong>
                 <span class="role">{{ isCustomerMessage(msg.userId) ? '客户' : '客服' }}</span>
-                <span class="time">{{ msg.createdAt }}</span>
+                <span class="time tabular-nums">{{ formatDateTime(msg.createdAt) }}</span>
               </div>
-              <p>{{ msg.content }}</p>
+              <p class="break-words">{{ msg.content }}</p>
             </div>
           </div>
           <el-empty v-else description="暂无留言" :image-size="60" />
           <div class="composer">
             <el-input
               v-model="replyContent"
+              name="reply"
+              autocomplete="off"
               type="textarea"
               :rows="3"
               placeholder="输入客服回复…"
@@ -202,6 +237,7 @@ async function handleReply() {
   max-width: 860px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+  scroll-margin-top: 72px;
 }
 
 .toolbar {
@@ -209,6 +245,7 @@ async function handleReply() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
 h1 {
@@ -237,6 +274,7 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .desc {
@@ -250,6 +288,12 @@ h3 {
   align-items: center;
   gap: 12px;
   margin-top: 16px;
+}
+
+.status-label {
+  color: #475569;
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 .ai {
@@ -284,6 +328,7 @@ h3 {
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
+  min-width: 0;
 }
 
 .role {
